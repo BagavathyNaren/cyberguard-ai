@@ -1,0 +1,11 @@
+# Python environment and caches
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+
+# OS/System files
+.DS_Store
+.git/
+
+.env

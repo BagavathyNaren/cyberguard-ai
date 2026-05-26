@@ -1,0 +1,42 @@
+name: Deploy to Google Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write' # Required for Workload Identity Federation
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          # This connects to the Workload Identity Federation pool we just built
+          workload_identity_provider: 'projects/93337753347/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
+          service_account: 'github-actions-deployer@my-agentic-lab.iam.gserviceaccount.com'
+
+      - name: Set up Cloud SDK
+        uses: google-cloud-actions/setup-gcloud@v2
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker asia-south1-docker.pkg.dev
+
+      - name: Build and Push to Artifact Registry
+        run: |
+          docker build -t asia-south1-docker.pkg.dev/my-agentic-lab/cyberguard-repo/cyberguard-api:latest .
+          docker push asia-south1-docker.pkg.dev/my-agentic-lab/cyberguard-repo/cyberguard-api:latest
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy cyberguard-ai \
+            --image asia-south1-docker.pkg.dev/my-agentic-lab/cyberguard-repo/cyberguard-api:latest \
+            --platform managed \
+            --region asia-south1 \
+            --allow-unauthenticated
