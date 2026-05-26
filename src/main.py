@@ -61,9 +61,7 @@ async def root():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
-
-
+    return {"status": "ok", "service": "cyberguard-ai"}
 
 @app.post("/test")
 async def test_endpoint(background_tasks: BackgroundTasks):
@@ -81,3 +79,14 @@ async def test_endpoint(background_tasks: BackgroundTasks):
     
     background_tasks.add_task(process_event, job_id, sample)
     return {"status": "test_queued", "job_id": job_id, "sample": sample}
+
+@app.get("/debug-env")
+async def debug_env():
+    import os
+    api_key = os.environ.get("CREWAI_API_KEY")
+    return {
+        "tracing_enabled_var": os.environ.get("CREWAI_TRACING_ENABLED"),
+        "api_key_found": bool(api_key),
+        "api_key_starts_with": api_key[:5] if api_key else "MISSING",
+        "api_key_length": len(api_key) if api_key else 0
+    }
