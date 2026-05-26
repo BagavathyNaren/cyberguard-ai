@@ -26,5 +26,8 @@ EXPOSE 8080
 # Add this line to your Dockerfile
 ENV PYTHONPATH=/app:/app/src
 
+# Add this line before your CMD or ENTRYPOINT
+RUN rm -rf /root/.crewai
+
 # Run the application
 CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8080"]

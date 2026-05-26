@@ -4,6 +4,7 @@ from src.tools.edr_tool import EDRTool
 from src.tools.alert_tool import SlackAlertTool
 from src.tools.threat_intel_tool import ThreatIntelTool
 import os
+print(f"DEBUG: CREWAI_TRACING_ENABLED is set to: {os.environ.get('CREWAI_TRACING_ENABLED')}")
 
 # LLM 1 — Fast triage (cheap, high-volume)
 triage_llm = LLM(
