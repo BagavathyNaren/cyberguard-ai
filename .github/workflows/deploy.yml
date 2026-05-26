@@ -35,9 +35,15 @@ jobs:
 
       - name: Deploy to Cloud Run
         run: |
+          # 1. Initial deployment with basic configuration
           gcloud run deploy cyberguard-ai \
             --image asia-south1-docker.pkg.dev/my-agentic-lab/cyberguard-repo/cyberguard-api:latest \
             --platform managed \
             --region asia-south1 \
             --allow-unauthenticated
-            --no-cpu-throttling
+
+          # 2. Update CPU allocation to "always-on" to support background tracing
+          gcloud run services update cyberguard-ai \
+            --cpu-boost \
+            --no-cpu-throttling \
+            --region asia-south1
