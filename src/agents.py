@@ -9,6 +9,7 @@ if os.path.exists(tracing_config_dir):
 
 # Re-enforce the environment variable
 os.environ["CREWAI_TRACING_ENABLED"] = "true"
+os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "https://api.crewai.com"
 
 from crewai import Agent, LLM
 from src.tools.firewall_tool import FirewallTool
@@ -17,6 +18,8 @@ from src.tools.alert_tool import SlackAlertTool
 from src.tools.threat_intel_tool import ThreatIntelTool
 
 print(f"DEBUG: CREWAI_TRACING_ENABLED is set to: {os.environ.get('CREWAI_TRACING_ENABLED')}")
+print(f"DEBUG: OTEL_EXPORTER_OTLP_ENDPOINT is set to: {os.environ.get('OTEL_EXPORTER_OTLP_ENDPOINT')}")
+
 
 # LLM 1 — Fast triage (cheap, high-volume)
 triage_llm = LLM(
