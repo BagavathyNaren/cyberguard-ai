@@ -1,9 +1,21 @@
+import os
+import shutil
+
+# Force-clear the cached tracing preference before the SDK initializes
+tracing_config_dir = "/root/.crewai"
+if os.path.exists(tracing_config_dir):
+    shutil.rmtree(tracing_config_dir)
+    print("DEBUG: Cleared CrewAI tracing cache.")
+
+# Re-enforce the environment variable
+os.environ["CREWAI_TRACING_ENABLED"] = "true"
+
 from crewai import Agent, LLM
 from src.tools.firewall_tool import FirewallTool
 from src.tools.edr_tool import EDRTool
 from src.tools.alert_tool import SlackAlertTool
 from src.tools.threat_intel_tool import ThreatIntelTool
-import os
+
 print(f"DEBUG: CREWAI_TRACING_ENABLED is set to: {os.environ.get('CREWAI_TRACING_ENABLED')}")
 
 # LLM 1 — Fast triage (cheap, high-volume)
