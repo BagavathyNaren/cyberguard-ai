@@ -55,9 +55,15 @@ async def process_event(job_id: str, data: dict):
 def get_result(job_id: str):
     return results_store.get(job_id, {"status": "processing"})
 
+@app.get("/")
+async def root():
+    return {"message": "CyberGuard AI is running and ready for remediation tasks."}
+
 @app.get("/health")
-def health():
-    return {"status": "ok", "service": "cyberguard-ai"}
+async def health():
+    return {"status": "ok"}
+
+
 
 @app.post("/test")
 async def test_endpoint(background_tasks: BackgroundTasks):

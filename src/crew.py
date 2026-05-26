@@ -72,7 +72,8 @@ def run_security_crew(log_event: dict) -> dict:
         tasks=[triage_task, analyze_task, execute_task],
         process=Process.sequential,
         verbose=True,
-        max_rpm=10  # It forces CrewAI to slow down its API calls to stay under the 15 RPM limit.
+        max_rpm=10,  # It forces CrewAI to slow down its API calls to stay under the 15 RPM limit.
+        tracing=True
     )
 
     result = crew.kickoff()
