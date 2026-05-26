@@ -1,5 +1,4 @@
-# Triggering pipeline now
-name: Deploy to Google Cloud Run
+name: Deploy to Google Cloud  Run
 
 on:
   push:
@@ -12,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: 'read'
-      id-token: 'write' # Required for Workload Identity Federation
+      id-token: 'write'
 
     steps:
       - uses: actions/checkout@v4
@@ -20,7 +19,6 @@ jobs:
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-          # This connects to the Workload Identity Federation pool we just built
           workload_identity_provider: 'projects/93337753347/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
           service_account: 'github-actions-deployer@my-agentic-lab.iam.gserviceaccount.com'
 
