@@ -33,6 +33,16 @@ logger = get_structured_logger("cyberguard_api")
 app = FastAPI(title="CyberGuard AI", version="1.0.0")
 app.include_router(approval_router) # <--- This brings your Slack routes to life
 
+class LogEvent(BaseModel):
+    source_ip: str
+    destination_ip: Optional[str] = None
+    event_type: str
+    timestamp: str
+    raw_log: str
+    metadata: dict = {}
+
+results_store: dict = {}  # In-memory store (we will upgrade this to Redis next!)
+
 @app.post("/analyze-interactive")
 async def trigger_security_analysis(log_data: LogEvent):
     # 1. Generate the ID upfront
@@ -81,15 +91,6 @@ async def trigger_security_analysis(log_data: LogEvent):
             "crew_analysis": crew_result
         }
 
-class LogEvent(BaseModel):
-    source_ip: str
-    destination_ip: Optional[str] = None
-    event_type: str
-    timestamp: str
-    raw_log: str
-    metadata: dict = {}
-
-results_store: dict = {}  # In-memory store (we will upgrade this to Redis next!)
 
 @app.post("/analyze")
 async def analyze(event: LogEvent, background_tasks: BackgroundTasks):
