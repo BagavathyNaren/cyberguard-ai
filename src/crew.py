@@ -5,8 +5,7 @@ from langsmith import traceable
 
 # Wrap your execution function to ensure it's tracked
 @traceable(project_name="cyberguard-ai")
-def run_security_crew(log_event: dict) -> dict:
-    incident_id = f"INC-{str(uuid.uuid4())[:8].upper()}"
+def run_security_crew(log_event: dict, incident_id: str) -> dict:
 
     triage_task = Task(
         description=f"""

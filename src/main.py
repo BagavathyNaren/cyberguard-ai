@@ -1,4 +1,4 @@
-from fastapi import FastAPI, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from typing import Optional
 import asyncio, uuid
@@ -10,11 +10,9 @@ from dotenv import load_dotenv
 from langsmith import Client
 import uuid
 import logging
-from fastapi import APIRouter, HTTPException, BackgroundTasks
-from src.crew import CyberGuardCrew  # Your actual Crew import
-from src.approval_endpoint import SessionLocal, Incident  # Your DB models
+from src.crew import run_security_crew  # Your actual Crew import
+from src.approval_endpoint import approval_router, SessionLocal, Incident  # Your DB models
 from src.main_polling import wait_for_soc_approval  # The polling function we wrote earlier
-
 
 # Force the environment to use the specific project
 os.environ["LANGCHAIN_PROJECT"] = "cyberguard-ai"
@@ -33,7 +31,55 @@ logger.info(f"LangSmith Tracing Enabled: {os.getenv('LANGCHAIN_TRACING_V2')}")
 logger = get_structured_logger("cyberguard_api")
 
 app = FastAPI(title="CyberGuard AI", version="1.0.0")
-router = APIRouter()
+app.include_router(approval_router) # <--- This brings your Slack routes to life
+
+@app.post("/analyze-interactive")
+async def trigger_security_analysis(log_data: LogEvent):
+    # 1. Generate the ID upfront
+    incident_id = f"INC-{uuid.uuid4().hex[:8].upper()}"
+    
+    # 2. Insert PENDING status into Database BEFORE the agent runs
+    db = SessionLocal()
+    try:
+        new_incident = Incident(
+            id=incident_id,
+            status="PENDING",
+            approved=False
+        )
+        db.add(new_incident)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.error(f"DB Error: {e}")
+        raise HTTPException(status_code=500, detail="Database instantiation failed")
+    finally:
+        db.close()
+
+    # 3. Run the Crew (pass the ID we just generated)
+    logger.info(f"🚀 Starting Crew analysis for {incident_id}")
+    crew_result = run_security_crew(log_event=log_data.dict(), incident_id=incident_id)
+    
+    # 4. ENTER THE GATEKEEPER LOOP
+    # The execution pauses here until the DB status changes to APPROVED or DENIED via Slack
+    logger.info(f"⏳ Pausing execution. Waiting for SOC analyst approval in Slack for {incident_id}...")
+    is_approved = wait_for_soc_approval(incident_id=incident_id, timeout_seconds=300, poll_interval=5)
+    
+    # 5. Final Action Plane
+    if is_approved:
+        logger.info(f"✅ APPROVED! Executing final remediation blocks for {incident_id}...")
+        # (Future step: Trigger your actual firewall block script here)
+        return {
+            "incident_id": incident_id,
+            "status": "APPROVED & Remediated",
+            "crew_analysis": crew_result
+        }
+    else:
+        logger.warning(f"🛑 DENIED or TIMED OUT. Aborting remediation for {incident_id}.")
+        return {
+            "incident_id": incident_id,
+            "status": "DENIED / Aborted",
+            "crew_analysis": crew_result
+        }
 
 class LogEvent(BaseModel):
     source_ip: str
@@ -111,8 +157,8 @@ async def debug_env():
         "api_key_length": len(api_key) if api_key else 0
     }
 
-@router.post("/test-incident")
-async def trigger_security_analysis(background_tasks: BackgroundTasks):
+@app.post("/test-incident")
+async def trigger_security_analysis_test(background_tasks: BackgroundTasks):
     # 1. Generate a unique, trackable Incident ID before starting
     incident_id = f"INC-{uuid.uuid4().hex[:8].upper()}"
     
@@ -143,7 +189,7 @@ async def trigger_security_analysis(background_tasks: BackgroundTasks):
     
     # 4. Kick off your Crew execution 
     # (The Crew will run, call your updated SlackAlertTool, post the buttons, and finish its analysis phase)
-    crew_output = CyberGuardCrew().crew().kickoff(inputs=inputs)
+    crew_output = run_security_crew().crew().kickoff(inputs=inputs)
     
     # 5. ENTER THE GATEKEEPER LOOP
     # This freezes the endpoint thread right here, waiting for the Postgres status to change

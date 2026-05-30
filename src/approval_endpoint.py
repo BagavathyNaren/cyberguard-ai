@@ -8,6 +8,7 @@ import hmac
 import hashlib
 import time
 import json
+from fastapi import APIRouter
 
 # Database config - dynamically pull from environment
 DB_URL = os.getenv("DATABASE_URL")
@@ -28,7 +29,8 @@ class Incident(Base):
 
 Base.metadata.create_all(engine)
 
-app = FastAPI()
+
+approval_router = APIRouter()
 
 # This pulls the secret you just configured in Cloud Run
 SLACK_SIGNING_SECRET = os.getenv("SLACK_SIGNING_SECRET")
@@ -66,7 +68,7 @@ async def verify_slack_signature(request: Request):
     if not hmac.compare_digest(local_signature, signature):
         raise HTTPException(status_code=401, detail="Invalid request signature.")
 
-@app.post("/incident/{incident_id}/approve")
+@approval_router.post.post("/incident/{incident_id}/approve")
 def approve_incident(incident_id: str):
     db = SessionLocal()
     incident = db.query(Incident).filter(Incident.id == incident_id).first()
@@ -78,7 +80,7 @@ def approve_incident(incident_id: str):
     db.close()
     return {"status": "success", "message": f"Incident {incident_id} approved"}
 
-@app.post("/slack/interactive")
+@approval_router.post.post("/slack/interactive")
 async def handle_slack_interactive(request: Request):
     # 1. Run the signature verification manually to parse the body correctly
     await verify_slack_signature(request)
