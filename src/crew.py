@@ -1,7 +1,10 @@
 from crewai import Crew, Task, Process
 from src.agents import triage_agent, analyzer_agent, executor_agent
 import uuid, json
+from langsmith import traceable
 
+# Wrap your execution function to ensure it's tracked
+@traceable(project_name="cyberguard-ai")
 def run_security_crew(log_event: dict) -> dict:
     incident_id = f"INC-{str(uuid.uuid4())[:8].upper()}"
 
