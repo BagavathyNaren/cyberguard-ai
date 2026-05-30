@@ -7,6 +7,15 @@ from src.logger import get_structured_logger
 import os
 import logging
 from dotenv import load_dotenv
+from langsmith import Client
+
+# Force the environment to use the specific project
+os.environ["LANGCHAIN_PROJECT"] = "cyberguard-ai"
+os.environ["LANGCHAIN_TRACING_V2"] = "true"
+
+# Optional: Add a client ping to verify connectivity
+client = Client()
+print(f"DEBUG: LangSmith client initialized for project: {os.environ['LANGCHAIN_PROJECT']}")
 
 # 1. Force Python to look in the parent directory for the .env file BEFORE doing anything else
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
