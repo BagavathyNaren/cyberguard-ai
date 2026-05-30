@@ -8,6 +8,13 @@ import os
 import logging
 from dotenv import load_dotenv
 from langsmith import Client
+import uuid
+import logging
+from fastapi import APIRouter, HTTPException, BackgroundTasks
+from src.crew import CyberGuardCrew  # Your actual Crew import
+from src.approval_endpoint import SessionLocal, Incident  # Your DB models
+from src.main_polling import wait_for_soc_approval  # The polling function we wrote earlier
+
 
 # Force the environment to use the specific project
 os.environ["LANGCHAIN_PROJECT"] = "cyberguard-ai"
@@ -26,6 +33,7 @@ logger.info(f"LangSmith Tracing Enabled: {os.getenv('LANGCHAIN_TRACING_V2')}")
 logger = get_structured_logger("cyberguard_api")
 
 app = FastAPI(title="CyberGuard AI", version="1.0.0")
+router = APIRouter()
 
 class LogEvent(BaseModel):
     source_ip: str
@@ -102,3 +110,58 @@ async def debug_env():
         "api_key_starts_with": api_key[:5] if api_key else "MISSING",
         "api_key_length": len(api_key) if api_key else 0
     }
+
+@router.post("/test-incident")
+async def trigger_security_analysis(background_tasks: BackgroundTasks):
+    # 1. Generate a unique, trackable Incident ID before starting
+    incident_id = f"INC-{uuid.uuid4().hex[:8].upper()}"
+    
+    # 2. Insert the initial PENDING record into your Postgres DB
+    db = SessionLocal()
+    try:
+        new_incident = Incident(
+            id=incident_id,
+            status="PENDING",
+            approved=False
+        )
+        db.add(new_incident)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to initialize incident in DB: {e}")
+        raise HTTPException(status_code=500, detail="Database instantiation failed")
+    finally:
+        db.close()
+
+    # 3. Inject this specific incident_id into the inputs for your Crew
+    inputs = {
+        "network_logs": "SRC_IP: 192.168.1.50 -> DST_IP: 10.0.0.5 | Protocol: TCP | Flags: XMAS Scan detected on port 80, 443, 22",
+        "incident_id": incident_id
+    }
+    
+    logger.info(f"🚀 Kickoff CrewAI for {incident_id}")
+    
+    # 4. Kick off your Crew execution 
+    # (The Crew will run, call your updated SlackAlertTool, post the buttons, and finish its analysis phase)
+    crew_output = CyberGuardCrew().crew().kickoff(inputs=inputs)
+    
+    # 5. ENTER THE GATEKEEPER LOOP
+    # This freezes the endpoint thread right here, waiting for the Postgres status to change
+    is_approved = wait_for_soc_approval(incident_id=incident_id, timeout_seconds=300, poll_interval=5)
+    
+    # 6. Action Plane Enforcement
+    if is_approved:
+        logger.info(f"⚡ [EXECUTION PHASE] Proceeding with remediation for {incident_id}...")
+        # Add your secondary tools execution here (e.g., Firewall control, IP blocking)
+        return {
+            "incident_id": incident_id,
+            "status": "Remediation Executed Successfully",
+            "analysis": str(crew_output)
+        }
+    else:
+        logger.warning(f"🛑 [REMEDIATION ABORTED] SOC Analyst denied action or session timed out for {incident_id}.")
+        return {
+            "incident_id": incident_id,
+            "status": "Remediation Denied / Aborted Safely",
+            "analysis": str(crew_output)
+        }
