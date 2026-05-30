@@ -68,7 +68,7 @@ async def verify_slack_signature(request: Request):
     if not hmac.compare_digest(local_signature, signature):
         raise HTTPException(status_code=401, detail="Invalid request signature.")
 
-@approval_router.post.post("/incident/{incident_id}/approve")
+@approval_router.post("/incident/{incident_id}/approve")
 def approve_incident(incident_id: str):
     db = SessionLocal()
     incident = db.query(Incident).filter(Incident.id == incident_id).first()
@@ -80,7 +80,7 @@ def approve_incident(incident_id: str):
     db.close()
     return {"status": "success", "message": f"Incident {incident_id} approved"}
 
-@approval_router.post.post("/slack/interactive")
+@approval_router.post("/slack/interactive")
 async def handle_slack_interactive(request: Request):
     # 1. Run the signature verification manually to parse the body correctly
     await verify_slack_signature(request)
