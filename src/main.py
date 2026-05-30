@@ -180,18 +180,17 @@ async def trigger_security_analysis_test(background_tasks: BackgroundTasks):
     finally:
         db.close()
 
-    # 3. Inject this specific incident_id into the inputs for your Crew
-    inputs = {
-        "network_logs": "SRC_IP: 192.168.1.50 -> DST_IP: 10.0.0.5 | Protocol: TCP | Flags: XMAS Scan detected on port 80, 443, 22",
-        "incident_id": incident_id
+    # 3. Create a mock log event dictionary
+    mock_log = {
+           "raw_log": "SRC_IP: 192.168.1.50 -> DST_IP: 10.0.0.5 | Protocol: TCP | Flags: XMAS Scan detected on port 80, 443, 22"   
     }
     
     logger.info(f"🚀 Kickoff CrewAI for {incident_id}")
     
-    # 4. Kick off your Crew execution 
+    # 4. Run the Crew with the updated function signature 
     # (The Crew will run, call your updated SlackAlertTool, post the buttons, and finish its analysis phase)
-    crew_output = run_security_crew().crew().kickoff(inputs=inputs)
-    
+    crew_output = run_security_crew(log_event=mock_log, incident_id=incident_id)
+
     # 5. ENTER THE GATEKEEPER LOOP
     # This freezes the endpoint thread right here, waiting for the Postgres status to change
     is_approved = wait_for_soc_approval(incident_id=incident_id, timeout_seconds=300, poll_interval=5)
