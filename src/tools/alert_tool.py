@@ -1,6 +1,8 @@
 from crewai.tools import BaseTool
 from pydantic import BaseModel, Field
-import httpx, os
+import httpx
+import os
+import json
 
 class AlertInput(BaseModel):
     severity: str = Field(description="LOW, MEDIUM, or HIGH")
@@ -17,25 +19,69 @@ class SlackAlertTool(BaseTool):
     def _run(self, severity: str, summary: str, recommended_action: str,
              incident_id: str, requires_approval: bool = False) -> str:
         url = os.getenv("SLACK_WEBHOOK_URL", "mock")
-        colors = {"HIGH": "#E24B4A", "MEDIUM": "#EF9F27", "LOW": "#639922"}
         
         if url == "mock":
             return f"[MOCK] Alert sent | {severity} | {incident_id} | Approval needed: {requires_approval}"
             
-        approval = "YES — Reply with INC ID to approve" if requires_approval else "NO — Auto-remediating"
-        
+        # 1. Base structured text block layout
         payload = {
-            "attachments": [{
-                "color": colors.get(severity, "#888"),
-                "title": f"[{severity}] {incident_id}",
-                "text": summary,
-                "fields": [
-                    {"title": "Recommended action", "value": recommended_action},
-                    {"title": "Human approval", "value": approval, "short": True}
-                ]
-            }]
+            "text": f"🚨 [{severity}] CyberGuard Threat Alert: {incident_id}",
+            "blocks": [
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f"🚨 *[{severity}] Security Threat Detected*\n\n"
+                                f"*Incident ID:* `{incident_id}`\n"
+                                f"*Summary:* {summary}\n"
+                                f"*Recommended Action:* {recommended_action}"
+                    }
+                }
+            ]
         }
         
+        # 2. Dynamically attach interactive buttons if Human approval is required
+        if requires_approval:
+            payload["blocks"].append({
+                "type": "actions",
+                "elements": [
+                    {
+                        "type": "button",
+                        "text": {
+                            "type": "plain_text",
+                            "text": "Approve Mitigation",
+                            "emoji": True
+                        },
+                        "style": "primary",
+                        "value": incident_id,
+                        "action_id": "approve_incident_action"
+                    },
+                    {
+                        "type": "button",
+                        "text": {
+                            "type": "plain_text",
+                            "text": "Deny / Ignore",
+                            "emoji": True
+                        },
+                        "style": "danger",
+                        "value": incident_id,
+                        "action_id": "deny_incident_action"
+                    }
+                ]
+            })
+        else:
+            # Informational notice for auto-remediations
+            payload["blocks"].append({
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "mrkdwn",
+                        "text": "⚡ *Auto-Remediation active:* Execution continuing without structural gates."
+                    }
+                ]
+            })
+        
+        # 3. Ship payload to your Slack Webhook
         try:
             r = httpx.post(url, json=payload, timeout=10)
             return f"Slack: {r.status_code}"
