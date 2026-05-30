@@ -5,6 +5,7 @@ import asyncio, uuid
 from src.crew import run_security_crew
 from src.logger import get_structured_logger
 import os
+import logging
 from dotenv import load_dotenv
 
 # 1. Force Python to look in the parent directory for the .env file BEFORE doing anything else
