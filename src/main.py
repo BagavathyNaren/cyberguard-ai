@@ -12,7 +12,6 @@ from langsmith import Client
 # Force the environment to use the specific project
 os.environ["LANGCHAIN_PROJECT"] = "cyberguard-ai"
 os.environ["LANGCHAIN_TRACING_V2"] = "true"
-
 # Optional: Add a client ping to verify connectivity
 client = Client()
 print(f"DEBUG: LangSmith client initialized for project: {os.environ['LANGCHAIN_PROJECT']}")
