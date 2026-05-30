@@ -9,6 +9,9 @@ from dotenv import load_dotenv
 
 # 1. Force Python to look in the parent directory for the .env file BEFORE doing anything else
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
+logger = logging.getLogger("uvicorn")
+logger.info(f"LangSmith Project: {os.getenv('LANGCHAIN_PROJECT')}")
+logger.info(f"LangSmith Tracing Enabled: {os.getenv('LANGCHAIN_TRACING_V2')}")
 
 # Initialize our new structured JSON logger
 logger = get_structured_logger("cyberguard_api")
