@@ -44,7 +44,7 @@ class LogEvent(BaseModel):
 results_store: dict = {}  # In-memory store (we will upgrade this to Redis next!)
 
 @app.post("/analyze-interactive")
-async def trigger_security_analysis(log_data: LogEvent):
+def trigger_security_analysis(log_data: LogEvent):
     # 1. Generate the ID upfront
     incident_id = f"INC-{uuid.uuid4().hex[:8].upper()}"
     
@@ -159,7 +159,7 @@ async def debug_env():
     }
 
 @app.post("/test-incident")
-async def trigger_security_analysis_test(background_tasks: BackgroundTasks):
+def trigger_security_analysis_test(background_tasks: BackgroundTasks):
     # 1. Generate a unique, trackable Incident ID before starting
     incident_id = f"INC-{uuid.uuid4().hex[:8].upper()}"
     
