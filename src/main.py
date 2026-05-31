@@ -1,25 +1,27 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from typing import Optional
-import asyncio, uuid
-from src.crew import run_security_crew
-from src.logger import get_structured_logger
+import asyncio
+import uuid
 import os
 import logging
 from dotenv import load_dotenv
 from langsmith import Client
-import uuid
-import logging
-from src.crew import run_security_crew  # Your actual Crew import
-from src.approval_endpoint import approval_router, SessionLocal, Incident  # Your DB models
-from src.main_polling import wait_for_soc_approval  # The polling function we wrote earlier
+
+from src.crew import run_security_crew
+from src.logger import get_structured_logger
+from src.main_polling import wait_for_soc_approval
+# Import DB models and your new Slack reply tool
+from src.approval_endpoint import approval_router, SessionLocal, Incident, send_slack_thread_reply
+# Import the remediation function we drafted earlier
+from src.remediation import execute_approved_remediation 
 
 # Force the environment to use the specific project
 os.environ["LANGCHAIN_PROJECT"] = "cyberguard-ai"
 os.environ["LANGCHAIN_TRACING_V2"] = "true"
 # Optional: Add a client ping to verify connectivity
 client = Client()
-print(f"DEBUG: LangSmith client initialized for project: {os.environ['LANGCHAIN_PROJECT']}")
+print(f"DEBUG: LangSmith client initialized for project: {os.environ.get('LANGCHAIN_PROJECT')}")
 
 # 1. Force Python to look in the parent directory for the .env file BEFORE doing anything else
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
@@ -198,12 +200,58 @@ def trigger_security_analysis_test(background_tasks: BackgroundTasks):
     # 6. Action Plane Enforcement
     if is_approved:
         logger.info(f"⚡ [EXECUTION PHASE] Proceeding with remediation for {incident_id}...")
-        # Add your secondary tools execution here (e.g., Firewall control, IP blocking)
+
+        # 1. Open a fresh database session to grab the incident and its Slack thread coordinates
+        db_session = SessionLocal()
+        incident = db_session.query(Incident).filter(Incident.id == incident_id).first()
+
+        if not incident:
+            logger.error(f"Could not find incident {incident_id} in DB during execution phase.")
+            db_session.close()
+            raise HTTPException(status_code=500, detail="Incident lost during execution")
+
+        slack_channel = incident.slack_channel_id
+        slack_thread = incident.slack_thread_ts
+
+        # 2. Run your actual remediation logic (Firewall / EDR)
+        try:
+            # We pass the crew_output dictionary here so the remediation function can extract IPs/ports
+            remediation_summary = execute_approved_remediation(incident_id, crew_output)
+            
+            # 3. Check the status and format the Slack reply
+            if remediation_summary.get("status") == "SUCCESS":
+                reply_text = f"✅ *Remediation Successful*\nAll approved actions executed without error."
+            else:
+                # If a tool timed out or failed, alert the team immediately
+                errors = "\n".join(remediation_summary.get("errors", ["Unknown error occurred"]))
+                reply_text = f"🚨 *REMEDIATION FAILED*\nOne or more tools encountered an error during execution:\n```{errors}```\n<@here> Manual intervention required!"
+                
+        except Exception as e:
+            reply_text = f"🚨 *CRITICAL EXECUTION ERROR*\nThe execution engine crashed: `{str(e)}`"
+
+        # 4. Send the reply back to the EXACT Slack thread!
+        if slack_channel and slack_thread:
+            send_slack_thread_reply(
+                channel_id=slack_channel, 
+                thread_ts=slack_thread, 
+                text=reply_text
+            )
+        else:
+            logger.warning(f"Could not send Slack reply for {incident_id}. Missing channel/thread IDs.")
+
+        # Mark the incident as completed in the database
+        incident.status = "COMPLETED"
+        db_session.commit()
+        db_session.close()
+
+        logger.info(f"Execution complete for {incident_id}.")
+
         return {
             "incident_id": incident_id,
             "status": "Remediation Executed Successfully",
             "analysis": str(crew_output)
         }
+        
     else:
         logger.warning(f"🛑 [REMEDIATION ABORTED] SOC Analyst denied action or session timed out for {incident_id}.")
         return {
