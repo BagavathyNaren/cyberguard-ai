@@ -6,6 +6,9 @@ from src.tools.edr_tool import EDRTool
 from src.tools.alert_tool import SlackAlertTool
 from src.tools.threat_intel_tool import ThreatIntelTool
 
+# 2. Initialize the tools
+slack_alert = SlackAlertTool()
+threat_intel = ThreatIntelTool() # <-- INITIALIZE THE TOOL
 
 # LLM 1 — Fast triage (cheap, high-volume)
 triage_llm = LLM(
@@ -50,17 +53,19 @@ triage_agent = Agent(
     verbose=True
 )
 
+# 3. Update the Analyzer Agent
 analyzer_agent = Agent(
-    role="Senior Threat Intelligence Analyst",
-    goal="Deep incident report: MITRE mapping, blast radius, remediation.",
-    backstory="""Elite analyst, expert in MITRE ATT&CK. Correlate evidence,
-    enrich via threat intel tools, assess blast radius, recommend precise
-    actions. Always weigh false-positive risk before recommending isolation.
-    Structured report output only.""",
-    llm=analyzer_llm,
-    tools=[ThreatIntelTool()],
-    max_iter=3,
-    verbose=True
+    role="Tier 2 Threat Intelligence Analyst",
+    goal="Perform deep-dive analysis on triaged security events, determine blast radius, false positive risk, and recommend precise mitigation strategies.",
+    backstory=(
+        "You are an expert SOC analyst specializing in external threat intelligence. "
+        "Whenever a triage report contains an external 'source_ip', you ALWAYS use your "
+        "threat_intel_lookup tool to check its global reputation before making a final verdict. "
+        "You rely on data, not guesses."
+    ),
+    verbose=True,
+    allow_delegation=False,
+    tools=[threat_intel]  # <-- GIVE THE AGENT THE TOOL HERE
 )
 
 executor_agent = Agent(
