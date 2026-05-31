@@ -1,4 +1,4 @@
-from crewai import Crew, Task, Process
+from crewai import Agent, Crew, Process, Task
 from src.agents import triage_agent, analyzer_agent, executor_agent
 import uuid, json
 from langsmith import traceable
