@@ -24,12 +24,10 @@ def execute_approved_remediation(incident_id: str, crew_output: Dict[str, Any]) 
     }
     
     # 1. Safely extract action parameters from the CrewAI output
-    # crew_output is a dict containing {"incident_id": "...", "result": "..."}
     raw_result = crew_output.get("result", "")
     target_ip = None
     
     # Safety Net: Use regex to find the first IPv4 address in the agent's output text
-    # This ensures we never fail even if the agent outputs markdown instead of JSON
     ip_matches = re.findall(r'\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b', str(raw_result))
     if ip_matches:
         target_ip = ip_matches[0] 
@@ -41,7 +39,6 @@ def execute_approved_remediation(incident_id: str, crew_output: Dict[str, Any]) 
 
     # 2. Dynamic Tool Routing Logic
     try:
-        # Check the agent's raw output text for keywords to determine which tools to fire
         raw_result_upper = str(raw_result).upper()
         
         # Scenario A: EDR Isolation Required
@@ -49,7 +46,6 @@ def execute_approved_remediation(incident_id: str, crew_output: Dict[str, Any]) 
             logger.info(f"🛡️ Triggering EDR containment on host: {target_ip}")
             
             edr = EDRTool()
-            # UPDATED: Matches the exact signature of _run(self, endpoint_id: str, action: str, reason: str)
             edr_result = edr._run(
                 endpoint_id=target_ip, 
                 action="isolate", 
@@ -67,8 +63,13 @@ def execute_approved_remediation(incident_id: str, crew_output: Dict[str, Any]) 
             logger.info(f"🔥 Applying firewall restriction on IP {target_ip} for 60 mins")
             
             firewall = FirewallTool()
-            # Assuming FirewallTool expects action, ip_address, and duration_minutes
-            fw_result = firewall._run(action="block_ip", ip_address=target_ip, duration_minutes=60)
+            # UPDATED: Added the required 'reason' parameter to match your FirewallTool's strict signature
+            fw_result = firewall._run(
+                action="block_ip", 
+                ip_address=target_ip, 
+                duration_minutes=60,
+                reason=f"Automated firewall block approved by SOC for {incident_id}"
+            )
             
             execution_results["actions_taken"].append({
                 "tool": "FirewallTool",
