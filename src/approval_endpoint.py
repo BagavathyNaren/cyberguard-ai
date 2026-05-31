@@ -1,6 +1,8 @@
+import httpx
 from fastapi import Request,FastAPI, Depends, HTTPException
 from sqlalchemy import create_engine, Column, String, Boolean, DateTime
 from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.sql import func
 import datetime
 import os
 from dotenv import load_dotenv
@@ -26,6 +28,12 @@ class Incident(Base):
     id = Column(String, primary_key=True)
     status = Column(String, default="PENDING")
     approved = Column(Boolean, default=False)
+
+    # Automatically logs the exact time the row is inserted
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Automatically updates the timestamp whenever the row is modified
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 Base.metadata.create_all(engine)
 
@@ -68,18 +76,6 @@ async def verify_slack_signature(request: Request):
     if not hmac.compare_digest(local_signature, signature):
         raise HTTPException(status_code=401, detail="Invalid request signature.")
 
-@approval_router.post("/incident/{incident_id}/approve")
-def approve_incident(incident_id: str):
-    db = SessionLocal()
-    incident = db.query(Incident).filter(Incident.id == incident_id).first()
-    if not incident:
-        raise HTTPException(status_code=404, detail="Incident not found")
-    incident.status = "APPROVED"
-    incident.approved = True
-    db.commit()
-    db.close()
-    return {"status": "success", "message": f"Incident {incident_id} approved"}
-
 @approval_router.post("/slack/interactive")
 async def handle_slack_interactive(request: Request):
     # 1. Run the signature verification manually to parse the body correctly
@@ -89,25 +85,37 @@ async def handle_slack_interactive(request: Request):
     form_data = await request.form()
     payload = json.loads(form_data["payload"])
     
-    # 3. Extract the incident ID from the button's action value
+    # 3. Extract the incident ID and the unique response URL
     action = payload["actions"][0]
     incident_id = action["value"]
     action_id = action["action_id"]
+    response_url = payload["response_url"]  # <-- Slack's temporary webhook to edit this specific message
     
     # 4. Handle the database update based on which button was clicked
     db = SessionLocal()
     incident = db.query(Incident).filter(Incident.id == incident_id).first()
     
+    status_msg = "Action recorded."
+    
     if incident:
         if action_id == "approve_incident_action":
             incident.status = "APPROVED"
             incident.approved = True
+            status_msg = f"✅ *APPROVED* by SOC Analyst. Remediation proceeding for `{incident_id}`."
         elif action_id == "deny_incident_action":
             incident.status = "DENIED"
             incident.approved = False
+            status_msg = f"🛑 *DENIED* by SOC Analyst. Remediation aborted for `{incident_id}`."
             
         db.commit()
     db.close()
     
-    # 5. Respond back to Slack instantly with a 200 OK acknowledgment
-    return {"status": "success", "message": "Incident state updated successfully"}
+    # 5. Send a request back to Slack to instantly replace the buttons with the text confirmation
+    update_payload = {
+        "replace_original": True,
+        "text": status_msg
+    }
+    httpx.post(response_url, json=update_payload)
+    
+    # 6. Respond back to Slack instantly with a 200 OK acknowledgment
+    return {"status": "success"}
