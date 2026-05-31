@@ -65,7 +65,7 @@ analyzer_agent = Agent(
     ),
     verbose=True,
     allow_delegation=False,
-    tools=[threat_intel]  # <-- GIVE THE AGENT THE TOOL HERE
+    tools=[threat_intel],  # <-- GIVE THE AGENT THE TOOL HERE
     llm=analyzer_llm
 )
 
