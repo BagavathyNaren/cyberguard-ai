@@ -49,8 +49,12 @@ def execute_approved_remediation(incident_id: str, crew_output: Dict[str, Any]) 
             logger.info(f"🛡️ Triggering EDR containment on host: {target_ip}")
             
             edr = EDRTool()
-            # Note: Adjust the kwargs here if your EDRTool's _run method expects different parameter names
-            edr_result = edr._run(action="isolate", target=target_ip)
+            # UPDATED: Matches the exact signature of _run(self, endpoint_id: str, action: str, reason: str)
+            edr_result = edr._run(
+                endpoint_id=target_ip, 
+                action="isolate", 
+                reason=f"Automated isolation approved by SOC for {incident_id}"
+            )
             
             execution_results["actions_taken"].append({
                 "tool": "EDRTool",
@@ -63,7 +67,7 @@ def execute_approved_remediation(incident_id: str, crew_output: Dict[str, Any]) 
             logger.info(f"🔥 Applying firewall restriction on IP {target_ip} for 60 mins")
             
             firewall = FirewallTool()
-            # Note: Adjust the kwargs here if your FirewallTool's _run method expects different parameter names
+            # Assuming FirewallTool expects action, ip_address, and duration_minutes
             fw_result = firewall._run(action="block_ip", ip_address=target_ip, duration_minutes=60)
             
             execution_results["actions_taken"].append({
