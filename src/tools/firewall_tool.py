@@ -1,29 +1,49 @@
 from crewai.tools import BaseTool
 from pydantic import BaseModel, Field
-import httpx, os
+from google.cloud import compute_v1
+import google.auth
+import os
 
 class FirewallInput(BaseModel):
-    ip_address: str = Field(description="IP to block or unblock")
-    action: str = Field(description="'block' or 'unblock'")
-    reason: str = Field(description="Justification for action")
-    duration_minutes: int = Field(default=60, description="Block TTL in minutes")
+    action: str = Field(description="'block_ip' or 'unblock_ip'")
+    ip_address: str = Field(description="The IP address to block")
+    duration_minutes: int = Field(description="How long to block the IP")
+    reason: str = Field(description="Audit reason for this block")
 
 class FirewallTool(BaseTool):
-    name: str = "firewall_ip_control"
-    description: str = "Block/unblock IP via firewall API. Confirmed threats only."
+    name: str = "network_firewall_control"
+    description: str = "Blocks an attacker's IP at the perimeter using Google Cloud VPC Firewall."
     args_schema: type[BaseModel] = FirewallInput
 
-    def _run(self, ip_address: str, action: str, reason: str,
-             duration_minutes: int = 60) -> str:
-        url = os.getenv("FIREWALL_API_URL", "mock")
-        if url == "mock":
-            return (f"[MOCK] {ip_address} {action}ed "
-                    f"for {duration_minutes}min. Reason: {reason}")
+    def _run(self, action: str, ip_address: str, duration_minutes: int, reason: str) -> str:
+        # If testing locally, fallback to mock so it doesn't crash your local machine
+        if os.getenv("ENVIRONMENT") == "local":
+             return f"[MOCK] Firewall blocked {ip_address} for {duration_minutes} mins. Reason: {reason}"
+
         try:
-            r = httpx.post(f"{url}/rules", json={
-                "ip": ip_address, "action": action,
-                "ttl": duration_minutes * 60, "reason": reason
-            }, timeout=10)
-            return f"Firewall: {r.status_code} — {r.text}"
+            # Securely and automatically grab the GCP Project ID from Cloud Run's identity
+            _, project_id = google.auth.default()
+            
+            client = compute_v1.FirewallsClient()
+            rule_name = f"auto-block-{ip_address.replace('.', '-')}"
+            
+            if action == "block_ip":
+                # Create a strict DENY rule for the attacker's IP
+                firewall_rule = compute_v1.Firewall(
+                    name=rule_name,
+                    description=reason,
+                    network=f"projects/{project_id}/global/networks/default",
+                    direction="INGRESS",
+                    source_ranges=[f"{ip_address}/32"],
+                    denied=[compute_v1.Denied(I_p_protocol="all")],
+                    priority=100  # High priority ensures it overrides allow rules
+                )
+                
+                # Send the physical execution request to Google Cloud
+                operation = client.insert(project=project_id, firewall_resource=firewall_rule)
+                return f"SUCCESS: GCP VPC Firewall rule '{rule_name}' created blocking {ip_address}."
+                
+            return "Action not recognized."
+            
         except Exception as e:
-            return f"Firewall API error: {e}"
+            return f"Failed to execute VPC Firewall change: {str(e)}"
