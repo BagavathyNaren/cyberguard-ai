@@ -11,5 +11,5 @@ httpx>=0.28.0
 sqlalchemy
 psycopg2-binary
 langsmith
-google-cloud-compute>=3.0.0
+google-cloud-compute>=1.0.0
 google-auth>=2.0.0
