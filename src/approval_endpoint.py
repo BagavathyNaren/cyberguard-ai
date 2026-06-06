@@ -251,6 +251,7 @@ def run_cooldown_daemon():
     # UPDATED: Use boolean approved == True so it catches "COMPLETED" status incidents
     expired_incidents = db.query(Incident).filter(
         Incident.approved == True,
+        Incident.status != "EXPIRED",  # <-- ADD THIS LINE
         Incident.expires_at <= now
     ).all()
     
