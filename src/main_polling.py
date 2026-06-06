@@ -2,6 +2,7 @@ import time
 import os
 import logging
 from sqlalchemy import create_engine
+from sqlalchemy.pool import NullPool
 from sqlalchemy.orm import sessionmaker
 # Import your Incident model from your approval_endpoint file
 from src.approval_endpoint import Incident 
@@ -13,7 +14,7 @@ def wait_for_soc_approval(incident_id: str, timeout_seconds: int = 300, poll_int
     Pauses execution and polls the database until the SOC analyst approves the incident.
     """
     DB_URL = os.getenv("DATABASE_URL")
-    engine = create_engine(DB_URL)
+    engine = create_engine(DB_URL, poolclass=NullPool)
     SessionLocal = sessionmaker(bind=engine)
     
     start_time = time.time()
