@@ -246,9 +246,9 @@ def run_cooldown_daemon():
     # Get the exact current time in UTC
     now = datetime.datetime.now(datetime.timezone.utc)
     
-    # Find all approved incidents where the expiration timer has passed
+    # UPDATED: Use boolean approved == True so it catches "COMPLETED" status incidents
     expired_incidents = db.query(Incident).filter(
-        Incident.status == "APPROVED",
+        Incident.approved == True,
         Incident.expires_at <= now
     ).all()
     
