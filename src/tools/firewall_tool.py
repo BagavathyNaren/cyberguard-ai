@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 from google.cloud import compute_v1
 import google.auth
 import os
+from langsmith import traceable
 
 class FirewallInput(BaseModel):
     action: str = Field(description="'block_ip' or 'unblock_ip'")
@@ -15,6 +16,7 @@ class FirewallTool(BaseTool):
     description: str = "Blocks or unblocks an attacker's IP at the perimeter using Google Cloud VPC Firewall."
     args_schema: type[BaseModel] = FirewallInput
 
+    @traceable(name="firewall_block_control")
     def _run(self, action: str, ip_address: str, duration_minutes: int, reason: str) -> str:
         if os.getenv("ENVIRONMENT") == "local":
              return f"[MOCK] Firewall executed {action} on {ip_address}. Reason: {reason}"

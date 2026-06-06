@@ -1,6 +1,7 @@
 from crewai.tools import BaseTool
 from pydantic import BaseModel, Field
 import httpx, os
+from langsmith import traceable
 
 class EDRInput(BaseModel):
     endpoint_id: str = Field(description="Hostname or IP of the endpoint to isolate")
@@ -11,7 +12,8 @@ class EDRTool(BaseTool):
     name: str = "edr_host_isolation"
     description: str = "Isolate a compromised endpoint via EDR API. HIGH severity threats only."
     args_schema: type[BaseModel] = EDRInput
-
+    
+    @traceable(name="edr_host_isolation")
     def _run(self, endpoint_id: str, action: str, reason: str) -> str:
         url = os.getenv("EDR_API_URL", "mock")
         

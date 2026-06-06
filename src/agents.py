@@ -42,6 +42,7 @@ executor_llm = LLM(
     max_tokens=1000
 )
 
+
 triage_agent = Agent(
     role="Security Triage Analyst",
     goal="Rapidly classify security events. Return severity JSON.",

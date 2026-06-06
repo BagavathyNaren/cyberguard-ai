@@ -1,5 +1,6 @@
 from crewai.tools import BaseTool
 from pydantic import BaseModel, Field
+from langsmith import traceable
 import os
 import httpx
 
@@ -11,6 +12,7 @@ class ThreatIntelTool(BaseTool):
     description: str = "Check an IP address against AbuseIPDB to see if it is a known malicious actor. Returns a threat score and report count. ALWAYS use this on external IP addresses."
     args_schema: type[BaseModel] = ThreatIntelInput
 
+    @traceable(name="threat_intel_lookup")
     def _run(self, ip_address: str) -> str:
         api_key = os.getenv("ABUSEIPDB_API_KEY")
         if not api_key:
