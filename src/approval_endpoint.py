@@ -13,8 +13,6 @@ import json
 from src.tools.firewall_tool import FirewallTool
 from sqlalchemy.pool import NullPool
 
-
-
 # Database config - dynamically pull from environment
 DB_URL = os.getenv("DATABASE_URL")
 
@@ -34,7 +32,7 @@ class Incident(Base):
     slack_channel_id = Column(String, nullable=True)
     slack_thread_ts = Column(String, nullable=True)
     
-    # NEW: Tracks when the firewall block should be lifted
+    # Tracks when the firewall block should be lifted
     expires_at = Column(DateTime(timezone=True), nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -47,7 +45,6 @@ approval_router = APIRouter()
 
 # This pulls the secret configured in Cloud Run
 SLACK_SIGNING_SECRET = os.getenv("SLACK_SIGNING_SECRET")
-
 
 def send_slack_thread_reply(channel_id: str, thread_ts: str, text: str):
     """Sends a follow-up message into the specific Slack alert thread."""
@@ -69,11 +66,9 @@ def send_slack_thread_reply(channel_id: str, thread_ts: str, text: str):
     
     try:
         response = httpx.post(url, headers=headers, json=payload)
-        # NEW: Print Slack's exact response to the Cloud Run logs
         print(f"Slack API Response: {response.json()}")
     except Exception as e:
         print(f"Network error sending Slack thread reply: {e}")
-
 
 def run_remediation_and_update_slack(incident_id: str, response_url: str, channel_id: str, thread_ts: str):
     """
@@ -82,12 +77,14 @@ def run_remediation_and_update_slack(incident_id: str, response_url: str, channe
     """
     # Construct the structural parameters the remediation engine needs to parse out the target IP
     crew_output = {
-        "result": "ISOLATE source host 192.168.1.50 immediately via EDR. Block outbound XMAS scan traffic at firewall perimeter."
+        "result": "ISOLATE source host immediately via EDR. Block outbound scan traffic at firewall perimeter."
     }
     
     try:
-        # 1. Fire the live defense controls (GCP Firewall and EDR)
+        # 🛑 INLINE IMPORT: Prevents circular dependency with remediation.py
         from src.remediation import execute_approved_remediation
+        
+        # 1. Fire the live defense controls (GCP Firewall and EDR)
         results = execute_approved_remediation(incident_id, crew_output)
         
         # 2. Design the rich confirmation UI card
@@ -144,7 +141,6 @@ def run_remediation_and_update_slack(incident_id: str, response_url: str, channe
         }
         httpx.post(response_url, json=error_payload, timeout=10)
 
-
 async def verify_slack_signature(request: Request):
     """Validates that incoming requests genuinely originate from Slack."""
     if not SLACK_SIGNING_SECRET:
@@ -170,7 +166,6 @@ async def verify_slack_signature(request: Request):
     
     if not hmac.compare_digest(local_signature, signature):
         raise HTTPException(status_code=401, detail="Invalid request signature.")
-
 
 @approval_router.post("/slack/interactive")
 async def handle_slack_interactive(request: Request, background_tasks: BackgroundTasks):
@@ -204,7 +199,7 @@ async def handle_slack_interactive(request: Request, background_tasks: Backgroun
             incident.slack_channel_id = channel_id
             incident.slack_thread_ts = message_ts
 
-            # NEW: Set the cooldown timer for 60 minutes from right now
+            # Set the cooldown timer for 60 minutes from right now
             incident.expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=60)
             
             # Instantly swap buttons to avoid double-clicks while tools run

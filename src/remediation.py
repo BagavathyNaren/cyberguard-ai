@@ -10,6 +10,7 @@ from src.tools.edr_tool import EDRTool
 logger = logging.getLogger("cyberguard_api")
 
 def execute_approved_remediation(incident_id: str, crew_output: dict) -> dict:
+    from src.approval_endpoint import SessionLocal, Incident
     # 1. Fetch the dynamic IP from the database
     db = SessionLocal()
     incident = db.query(Incident).filter(Incident.id == incident_id).first()
