@@ -11,6 +11,7 @@ import hashlib
 import time
 import json
 from src.tools.firewall_tool import FirewallTool
+from sqlalchemy.pool import NullPool
 
 # Import your live remediation logic
 from src.remediation import execute_approved_remediation
