@@ -67,7 +67,9 @@ def send_slack_thread_reply(channel_id: str, thread_ts: str, text: str):
     }
     
     try:
-        httpx.post(url, headers=headers, json=payload)
+        response = httpx.post(url, headers=headers, json=payload)
+        # NEW: Print Slack's exact response to the Cloud Run logs
+        print(f"Slack API Response: {response.json()}")
     except Exception as e:
         print(f"Network error sending Slack thread reply: {e}")
 
