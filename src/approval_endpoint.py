@@ -87,6 +87,7 @@ def run_remediation_and_update_slack(incident_id: str, response_url: str, channe
     
     try:
         # 1. Fire the live defense controls (GCP Firewall and EDR)
+        from src.remediation import execute_approved_remediation
         results = execute_approved_remediation(incident_id, crew_output)
         
         # 2. Design the rich confirmation UI card
