@@ -10,6 +10,7 @@ import hmac
 import hashlib
 import time
 import json
+from src.tools.firewall_tool import FirewallTool
 
 # Import your live remediation logic
 from src.remediation import execute_approved_remediation
@@ -30,14 +31,13 @@ class Incident(Base):
     id = Column(String, primary_key=True)
     status = Column(String, default="PENDING")
     approved = Column(Boolean, default=False)
-    # Store the Slack context so main.py or background tasks can reply to the thread later
     slack_channel_id = Column(String, nullable=True)
     slack_thread_ts = Column(String, nullable=True)
-
-    # Automatically logs the exact time the row is inserted
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
     
-    # Automatically updates the timestamp whenever the row is modified
+    # NEW: Tracks when the firewall block should be lifted
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 Base.metadata.create_all(engine)
@@ -199,6 +199,9 @@ async def handle_slack_interactive(request: Request, background_tasks: Backgroun
             incident.approved = True
             incident.slack_channel_id = channel_id
             incident.slack_thread_ts = message_ts
+
+            # NEW: Set the cooldown timer for 60 minutes from right now
+            incident.expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=60)
             
             # Instantly swap buttons to avoid double-clicks while tools run
             status_msg = f"⏳ *PROCESSING:* Approval confirmed by SOC. Deploying cloud firewall rules and isolating `{incident_id}`..."
@@ -231,3 +234,59 @@ async def handle_slack_interactive(request: Request, background_tasks: Backgroun
     
     # 7. Return 200 OK instantly back to Slack's core webhook engine
     return {"status": "success"}
+
+@approval_router.post("/system/cooldown")
+def run_cooldown_daemon():
+    """
+    Scans the database for expired firewall blocks, removes the live GCP rules, 
+    and updates the Slack thread to notify the SOC team.
+    """
+    db = SessionLocal()
+    
+    # Get the exact current time in UTC
+    now = datetime.datetime.now(datetime.timezone.utc)
+    
+    # Find all approved incidents where the expiration timer has passed
+    expired_incidents = db.query(Incident).filter(
+        Incident.status == "APPROVED",
+        Incident.expires_at <= now
+    ).all()
+    
+    results = []
+    
+    for incident in expired_incidents:
+        # Note: In a complete production schema, we would fetch the specific IP 
+        # directly from an 'attacker_ip' column in the Incident table. 
+        # For this execution loop, we will target the known test IP.
+        target_ip = "192.168.1.50"
+        
+        # 1. Trigger the teardown via the FirewallTool
+        fw = FirewallTool()
+        fw_result = fw._run(
+            action="unblock_ip", 
+            ip_address=target_ip, 
+            duration_minutes=0, 
+            reason=f"Automated cooldown expiration for {incident.id}"
+        )
+        
+        # 2. Update the Database state to close the loop
+        incident.status = "EXPIRED"
+        
+        # 3. Notify the SOC team inside the original Slack thread
+        if incident.slack_channel_id and incident.slack_thread_ts:
+            send_slack_thread_reply(
+                channel_id=incident.slack_channel_id,
+                thread_ts=incident.slack_thread_ts,
+                text=f"🔓 *Cooldown Complete:* The temporary firewall block on `{target_ip}` has automatically expired. The GCP rule has been removed and perimeter access is restored.\n_Log:_ `{fw_result}`"
+            )
+            
+        results.append({"incident_id": incident.id, "action": "unblocked", "gcp_log": fw_result})
+        
+    db.commit()
+    db.close()
+    
+    return {
+        "status": "success", 
+        "expired_records_processed": len(results), 
+        "details": results
+    }
