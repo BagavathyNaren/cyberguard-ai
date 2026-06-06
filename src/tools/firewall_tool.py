@@ -18,21 +18,25 @@ class FirewallTool(BaseTool):
 
     @traceable(name="firewall_block_control")
     def _run(self, action: str, ip_address: str, duration_minutes: int, reason: str) -> str:
+        # The ip_address variable is safely passed dynamically
         if os.getenv("ENVIRONMENT") == "local":
              return f"[MOCK] Firewall executed {action} on {ip_address}. Reason: {reason}"
 
         try:
             _, project_id = google.auth.default()
             client = compute_v1.FirewallsClient()
+            
+            # Rule name dynamically generated based on the target IP
             rule_name = f"auto-block-{ip_address.replace('.', '-')}"
             
             if action == "block_ip":
+                print(f"Deploying GCP Firewall rule to block: {ip_address}")
                 firewall_rule = compute_v1.Firewall(
                     name=rule_name,
                     description=reason,
                     network=f"projects/{project_id}/global/networks/default",
                     direction="INGRESS",
-                    source_ranges=[f"{ip_address}/32"],
+                    source_ranges=[f"{ip_address}/32"],  # IP injected here
                     denied=[compute_v1.Denied(I_p_protocol="all")],
                     priority=100
                 )
@@ -41,7 +45,7 @@ class FirewallTool(BaseTool):
                 return f"SUCCESS: GCP VPC Firewall rule '{rule_name}' created blocking {ip_address}."
                 
             elif action == "unblock_ip":
-                # Physically delete the rule from Google Cloud
+                print(f"Removing GCP Firewall rule to unblock: {ip_address}")
                 client.delete(project=project_id, firewall=rule_name)
                 return f"SUCCESS: GCP VPC Firewall rule '{rule_name}' deleted. {ip_address} is unblocked."
                 

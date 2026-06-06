@@ -17,10 +17,12 @@ class EDRTool(BaseTool):
     def _run(self, endpoint_id: str, action: str, reason: str) -> str:
         url = os.getenv("EDR_API_URL", "mock")
         
+        # Dynamic endpoint_id successfully integrated
         if url == "mock":
             return f"[MOCK] Endpoint {endpoint_id} {action}d via EDR. Reason: {reason}"
         
         try:
+            print(f"Executing EDR action '{action}' on endpoint: {endpoint_id}")
             r = httpx.post(f"{url}/endpoints/{endpoint_id}/isolate", json={
                 "action": action,
                 "reason": reason

@@ -56,7 +56,8 @@ def trigger_security_analysis(log_data: LogEvent):
         new_incident = Incident(
             id=incident_id,
             status="PENDING",
-            approved=False
+            approved=False,
+            attacker_ip=log_data.source_ip  # <--- STEP 2: DYNAMIC IP SAVED HERE
         )
         db.add(new_incident)
         db.commit()
@@ -171,7 +172,8 @@ def trigger_security_analysis_test(background_tasks: BackgroundTasks):
         new_incident = Incident(
             id=incident_id,
             status="PENDING",
-            approved=False
+            approved=False,
+            attacker_ip="192.168.1.50"  # <--- STEP 2: DYNAMIC IP FOR MOCK TEST LOG
         )
         db.add(new_incident)
         db.commit()
@@ -224,7 +226,8 @@ def trigger_security_analysis_test(background_tasks: BackgroundTasks):
             else:
                 # If a tool timed out or failed, alert the team immediately
                 errors = "\n".join(remediation_summary.get("errors", ["Unknown error occurred"]))
-                reply_text = f"🚨 *REMEDIATION FAILED*\nOne or more tools encountered an error during execution:\n```{errors}```\n<@here> Manual intervention required!"
+                reply_text = f"🚨 *REMEDIATION FAILED*\nOne or more tools encountered an error during execution:\n```{errors}
+```\n<@here> Manual intervention required!"
                 
         except Exception as e:
             reply_text = f"🚨 *CRITICAL EXECUTION ERROR*\nThe execution engine crashed: `{str(e)}`"

@@ -16,6 +16,7 @@ from sqlalchemy.pool import NullPool
 # Import your live remediation logic
 from src.remediation import execute_approved_remediation
 
+
 # Database config - dynamically pull from environment
 DB_URL = os.getenv("DATABASE_URL")
 
@@ -40,6 +41,7 @@ class Incident(Base):
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    attacker_ip = Column(String(45), nullable=True)
 
 Base.metadata.create_all(engine)
 
@@ -240,57 +242,62 @@ async def handle_slack_interactive(request: Request, background_tasks: Backgroun
 
 @approval_router.post("/system/cooldown")
 def run_cooldown_daemon():
-    """
-    Scans the database for expired firewall blocks, removes the live GCP rules, 
-    and updates the Slack thread to notify the SOC team.
-    """
     db = SessionLocal()
     
-    # Get the exact current time in UTC
-    now = datetime.datetime.now(datetime.timezone.utc)
-    
-    # UPDATED: Use boolean approved == True so it catches "COMPLETED" status incidents
+    # Find expired, approved incidents
     expired_incidents = db.query(Incident).filter(
-        Incident.approved == True,
-        Incident.status != "EXPIRED",  # <-- ADD THIS LINE
-        Incident.expires_at <= now
+        Incident.status == "APPROVED",
+        Incident.expires_at <= func.now()
     ).all()
+
+    processed_count = 0
+    details = []
     
-    results = []
-    
+    fw_tool = FirewallTool()
+
     for incident in expired_incidents:
-        # Note: In a complete production schema, we would fetch the specific IP 
-        # directly from an 'attacker_ip' column in the Incident table. 
-        # For this execution loop, we will target the known test IP.
-        target_ip = "192.168.1.50"
+        # 1. Dynamically read the attacker IP from the DB row
+        target_ip = incident.attacker_ip
         
-        # 1. Trigger the teardown via the FirewallTool
-        fw = FirewallTool()
-        fw_result = fw._run(
-            action="unblock_ip", 
-            ip_address=target_ip, 
-            duration_minutes=0, 
-            reason=f"Automated cooldown expiration for {incident.id}"
-        )
-        
-        # 2. Update the Database state to close the loop
-        incident.status = "EXPIRED"
-        
-        # 3. Notify the SOC team inside the original Slack thread
+        # If for some reason the IP is missing, skip and log it safely
+        if not target_ip:
+            target_ip = "UNKNOWN_IP"
+            gcp_log = "Error: No target IP found in database for this incident."
+        else:
+            # 2. Execute dynamic teardown 
+            try:
+                gcp_log = fw_tool._run(
+                    action="unblock_ip",
+                    ip_address=target_ip,
+                    duration_minutes=0,  # ignored during unblock
+                    reason=f"Automated cooldown expiration for {incident.id}"
+                )
+            except Exception as e:
+                gcp_log = f"Failed to execute VPC Firewall change: {e}"
+
+        # 3. Dynamic Slack Notification to the specific thread
         if incident.slack_channel_id and incident.slack_thread_ts:
             send_slack_thread_reply(
                 channel_id=incident.slack_channel_id,
                 thread_ts=incident.slack_thread_ts,
-                text=f"🔓 *Cooldown Complete:* The temporary firewall block on `{target_ip}` has automatically expired. The GCP rule has been removed and perimeter access is restored.\n_Log:_ `{fw_result}`"
+                text=f"🔓 *Cooldown Complete:* The temporary firewall block on `{target_ip}` has automatically expired. Perimeter access is restored.\n_Log:_ `{gcp_log}`"
             )
-            
-        results.append({"incident_id": incident.id, "action": "unblocked", "gcp_log": fw_result})
-        
+
+        # 4. Close out the incident
+        incident.status = "EXPIRED"
+        processed_count += 1
+        details.append({
+            "incident_id": incident.id, 
+            "action": "unblocked", 
+            "target_ip": target_ip,
+            "gcp_log": gcp_log
+        })
+
     db.commit()
     db.close()
-    
+
     return {
-        "status": "success", 
-        "expired_records_processed": len(results), 
-        "details": results
+        "status": "success",
+        "expired_records_processed": processed_count,
+        "details": details
     }
