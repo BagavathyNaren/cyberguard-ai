@@ -6,7 +6,6 @@ from typing import Dict, Any
 # Import your existing production tools
 from src.tools.firewall_tool import FirewallTool
 from src.tools.edr_tool import EDRTool
-from src.approval_endpoint import SessionLocal, Incident
 
 logger = logging.getLogger("cyberguard_api")
 
