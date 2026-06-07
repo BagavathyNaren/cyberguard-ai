@@ -111,11 +111,17 @@ async def analyze(event: LogEvent, background_tasks: BackgroundTasks):
     background_tasks.add_task(process_event, job_id, event.dict())
     return {"status": "queued", "job_id": job_id}
 
+
 async def process_event(job_id: str, data: dict):
+    # 1. Generate the expected INC- format from the job_id
+    incident_id = f"INC-{job_id.upper()}"
+    
     try:
         logger.info("Starting CrewAI execution", extra={"custom_context": {"job_id": job_id}})
         loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(None, run_security_crew, data)
+        
+        # 2. Pass BOTH 'data' and 'incident_id' to run_security_crew
+        result = await loop.run_in_executor(None, run_security_crew, data, incident_id)
         
         # Save success to Upstash Redis
         if redis_client:
