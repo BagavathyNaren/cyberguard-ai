@@ -7,6 +7,8 @@ import os
 import logging
 from dotenv import load_dotenv
 from langsmith import Client
+import json
+import redis
 
 from src.crew import run_security_crew
 from src.logger import get_structured_logger
@@ -43,7 +45,9 @@ class LogEvent(BaseModel):
     raw_log: str
     metadata: dict = {}
 
-results_store: dict = {}  # In-memory store (we will upgrade this to Redis next!)
+# Initialize Redis client (decode_responses=True ensures we get strings back, not bytes)
+redis_url = os.getenv("REDIS_URL")
+redis_client = redis.from_url(redis_url, decode_responses=True) if redis_url else None
 
 @app.post("/analyze-interactive")
 def trigger_security_analysis(log_data: LogEvent):
@@ -112,18 +116,29 @@ async def process_event(job_id: str, data: dict):
         logger.info("Starting CrewAI execution", extra={"custom_context": {"job_id": job_id}})
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(None, run_security_crew, data)
-        results_store[job_id] = {"status": "complete", "result": result}
+        
+        # Save success to Upstash Redis
+        if redis_client:
+            redis_client.set(job_id, json.dumps({"status": "complete", "result": result}), ex=86400)
+            
         logger.info("CrewAI execution successful", extra={"custom_context": {"job_id": job_id}})
     except Exception as e:
-        results_store[job_id] = {"status": "error", "error": str(e)}
-        # Log the exact error mapped to the specific job ID
+        # Save error to Upstash Redis
+        if redis_client:
+            redis_client.set(job_id, json.dumps({"status": "error", "error": str(e)}), ex=86400)
+            
         logger.error(f"CrewAI execution failed: {str(e)}", extra={
             "custom_context": {"job_id": job_id, "error_type": type(e).__name__}
         })
 
 @app.get("/result/{job_id}")
 def get_result(job_id: str):
-    return results_store.get(job_id, {"status": "processing"})
+    if redis_client:
+        stored_result = redis_client.get(job_id)
+        if stored_result:
+            return json.loads(stored_result)
+    
+    return {"status": "processing"}
 
 @app.get("/")
 async def root():
