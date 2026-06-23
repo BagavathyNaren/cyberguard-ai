@@ -244,7 +244,19 @@ def trigger_security_analysis_test(background_tasks: BackgroundTasks):
             # 3. Check the status and format the Slack reply
             if remediation_summary.get("status") == "SUCCESS":
                 reply_text = f"✅ *Remediation Successful*\nAll approved actions executed without error."
+ 
             else:
                 # If a tool timed out or failed, alert the team immediately
                 errors = "\n".join(remediation_summary.get("errors", ["Unknown error occurred"]))
-                reply_text = f"🚨 *REMEDIATION FAILED*\nOne or more tools encountered an error during execution:\n```\n{errors}\n```\n<@here> Manual intervention required!"
+                reply_text = (
+                    f"🚨 *REMEDIATION FAILED*\n"
+                    f"One or more tools encountered an error during execution:\n"
+                    f"```\n{errors}\n```\n"
+                    f"<@here> Manual intervention required!"
+                )
+        except Exception as e:
+            logger.error(f"Remediation execution failed: {str(e)}", extra={
+                "custom_context": {"incident_id": incident_id, "error_type": type(e).__name__}
+            })
+    
+        
