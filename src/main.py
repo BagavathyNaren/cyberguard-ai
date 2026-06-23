@@ -247,40 +247,4 @@ def trigger_security_analysis_test(background_tasks: BackgroundTasks):
             else:
                 # If a tool timed out or failed, alert the team immediately
                 errors = "\n".join(remediation_summary.get("errors", ["Unknown error occurred"]))
-                reply_text = f"""🚨 *REMEDIATION FAILED* 
-                One or more tools encountered an error during execution:
-                <@here> Manual intervention required!"""
-                
-        except Exception as e:
-            reply_text = f"🚨 *CRITICAL EXECUTION ERROR*\nThe execution engine crashed: `{str(e)}`"
-
-        # 4. Send the reply back to the EXACT Slack thread!
-        if slack_channel and slack_thread:
-            send_slack_thread_reply(
-                channel_id=slack_channel, 
-                thread_ts=slack_thread, 
-                text=reply_text
-            )
-        else:
-            logger.warning(f"Could not send Slack reply for {incident_id}. Missing channel/thread IDs.")
-
-        # Mark the incident as completed in the database
-        incident.status = "COMPLETED"
-        db_session.commit()
-        db_session.close()
-
-        logger.info(f"Execution complete for {incident_id}.")
-
-        return {
-            "incident_id": incident_id,
-            "status": "Remediation Executed Successfully",
-            "analysis": str(crew_output)
-        }
-        
-    else:
-        logger.warning(f"🛑 [REMEDIATION ABORTED] SOC Analyst denied action or session timed out for {incident_id}.")
-        return {
-            "incident_id": incident_id,
-            "status": "Remediation Denied / Aborted Safely",
-            "analysis": str(crew_output)
-        }
+                reply_text = f"""🚨 *REMEDIATION FAILED* One or more tools encountered an error during execution:
