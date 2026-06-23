@@ -247,4 +247,4 @@ def trigger_security_analysis_test(background_tasks: BackgroundTasks):
             else:
                 # If a tool timed out or failed, alert the team immediately
                 errors = "\n".join(remediation_summary.get("errors", ["Unknown error occurred"]))
-                reply_text = f"""🚨 *REMEDIATION FAILED* One or more tools encountered an error during execution:
+                reply_text = f"🚨 *REMEDIATION FAILED*\nOne or more tools encountered an error during execution:\n```\n{errors}\n```\n<@here> Manual intervention required!"
